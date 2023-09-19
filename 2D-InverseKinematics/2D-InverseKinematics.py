@@ -67,13 +67,13 @@ def main():
 
     global xDes
     xInit = frame.get2DFKPosition(b_E_t, qs_symbolic, qInit, lengths_symbolic, lengths).astype(float)
-    xDes = np.array([2, 1])
+    xDes = np.array([3, -0.5])
 
 #     data_thread = threading.Thread(target=runIK, args=(qInit, xInit))
 #     data_thread.daemon = True  # Allow the thread to be terminated when the main program exits
 #     data_thread.start()
     plt.figure(figsize=(6,6))
-    animation = ani.FuncAnimation(plt.gcf(), runIK, fargs=(qInit, xInit), interval = 100)
+    animation = ani.FuncAnimation(plt.gcf(), runIK, fargs=(qInit, xInit), interval = 100, cache_frame_data=False)
     plt.show()
 
 def runIK(i, qInit, xInit):
@@ -84,7 +84,7 @@ def runIK(i, qInit, xInit):
         qCur = qInit
         xCur = xInit
     
-    alpha = 0.01
+    alpha = 0.1
 
     if np.linalg.norm(xDes - xCur) > 0.01:
        Ja_num = np.array(Ja.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
