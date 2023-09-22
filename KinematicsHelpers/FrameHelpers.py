@@ -46,6 +46,7 @@ def get2DFKPosition(b_E_t, qs_symbolic, qs, lengths_symbolic, lengths):
     
     return np.array([t[0], t[1]])
 
+
 # Computes the right pseudo-inverse of a matrix
 def computeRightPseudoInverse(J):
     JJ_T = np.matmul(J, np.transpose(J))
@@ -55,5 +56,61 @@ def computeRightPseudoInverse(J):
         JJ_T = JJ_T + 0.01*np.identity(JJ_T.shape[0])
     
     return np.matmul(np.transpose(J), np.linalg.inv(JJ_T))
-    
 
+
+# Extracts the 2D rotation matrix from a 2D homogenous transform
+def extractRotationMatrix2D(b_E_t):
+    b_R_t = np.array([[b_E_t[0][0], b_E_t[0][1]],\
+                      [b_E_t[1][0], b_E_t[1][1]]])
+    return b_R_t
+
+
+# Extracts the 2D translation vector from a 2D homogenous transform
+def extractTranslationVector2D(b_E_t):
+    b_T_t = np.array([[b_E_t[0][2]],[b_E_t[1][2]]])
+    return b_T_t
+
+
+# Computes the inverse of a 2D homogenous transform
+def computeInverseTransform2D(b_E_t):
+    b_R_t = extractRotationMatrix2D(b_E_t)
+    b_T_t = extractTranslationVector2D(b_E_t)
+
+    t_E_b = np.vstack((np.hstack((np.transpose(b_R_t), -1*np.matmul(np.transpose(b_R_t), b_T_t))), [0, 0, 1]))
+    return t_E_b
+
+
+# Computes the symbolic form of the body/geometric jacobian of a 2D robot
+def compute2DManipulatorJacobian(b_E_t, qs_symbolic):
+    Jb = np.empty((0,3))
+
+    for q in qs_symbolic:
+        twist_MAT = np.matmul(computeInverseTransform2D(b_E_t), sym.diff(b_E_t, q))
+        w = twist_MAT[1][0]
+        v = np.array([twist_MAT[0][2], twist_MAT[1][2]])
+
+        twist_VEC = np.hstack((v, w))
+        Jb = np.append(Jb, np.array([twist_VEC]), axis=0)
+    
+    return sym.simplify(np.transpose(Jb))
+
+
+# Computes the twist coordiates from current tool position to desired tool position
+# b_E_t = tool w.r.t. base
+# b_E_d = desired w.r.t. base
+def computeDesiredTwistCoordinates(b_E_t, b_E_d, qs, lengths):
+    t_E_d = np.matmul(computeInverseTransform2D(b_E_t), b_E_d).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
+         q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
+    
+    t_R_d = extractRotationMatrix2D(t_E_d)
+    t_T_d = extractTranslationVector2D(t_E_d)
+
+    theta = np.arccos((np.trace(t_R_d) - 1) / 2)
+
+    if theta == 0:
+        w = 0
+        t_T_d_norm = t_T_d / np.linalg.norm(t_T_d)
+        v = np.array([t_T_d_norm[0], t_T_d_norm[1]])
+        twist_VEC = np.transpose(np.hstack((v, w)))
+    else:
+        

@@ -49,6 +49,8 @@ def main():
      b_E_rightFingerBase, b_E_rightFingerTip = computeKinematicChain()
     Ja = computeAnalyticJacobian(b_E_t, qs_symbolic)
 
+    Jb = frame.compute2DManipulatorJacobian(b_E_t, qs_symbolic)
+
     global lengths
     lengths = [1, 1, 1, 1]
     qInit = [sym.pi/2, -sym.pi/4, -sym.pi/4, -sym.pi/4]
