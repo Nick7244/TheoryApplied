@@ -14,6 +14,7 @@ def main():
     global q1
     global q2
     global q3
+    global qWrist
     global l0
     global l1
     global l2
@@ -23,6 +24,7 @@ def main():
     q1 = sym.Symbol('q1')
     q2 = sym.Symbol('q2')
     q3 = sym.Symbol('q3')
+    qWrist = sym.Symbol('qWrist')
     l0 = sym.Symbol('l0')
     l1 = sym.Symbol('l1')
     l2 = sym.Symbol('l2')
@@ -61,6 +63,7 @@ def main():
     xInit = frame.get2DFKPosition(b_E_t, qs_symbolic, qInit, lengths_symbolic, lengths).astype(float)
 #     xDes = np.array([-2, 2])
 #     xDes = np.array([2, -0.5])
+#     xDes = np.array([2, -0.5])
 #     xDes = np.array([-0.75, -0.25])
     xDes = np.array([0, -1])
 
@@ -68,6 +71,7 @@ def main():
     global b_E_d
 #     thetaDes = 3*np.pi/4
 #     thetaDes = -np.pi/2
+#     thetaDes = -np.pi/4
 #     thetaDes = np.pi/4
     thetaDes = 0
     b_E_d = frame.create2DFrame(thetaDes, xDes)
@@ -99,13 +103,18 @@ def runIK(i, qInit, xInit):
        print(i)
        print(np.linalg.norm(xDes - xCur))
        print(" ")
-       plotRobot(qCur)
+       plotRobot(qCur, 0)
 
 
 def runFrameIK(i, qInit):
      global qCur
+     global finishedArm
+     global finishedWrist
+     global finalIterations
 
      if i == 0:
+          finishedArm = False
+          finishedWrist = False
           qCur = qInit
      
      alpha = 0.1
@@ -115,18 +124,32 @@ def runFrameIK(i, qInit):
      [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
      twist_Vec = np.append(v, w) * theta
 
-     if np.linalg.norm(v) > v_thresh or np.linalg.norm(w) > w_thresh:
+     if np.linalg.norm(v*theta) > v_thresh or np.linalg.norm(w*theta) > w_thresh:
           Jb_num = np.array(Jb.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
                                   q3:qCur[3], l0:lengths[0], l1:lengths[1], \
                                    l2:lengths[2], l3:lengths[3]})).astype(float)
           
           qCur = qCur + alpha * np.matmul(frame.computeRightPseudoInverse(Jb_num), twist_Vec)
-          
-          print(i)
-          print(np.linalg.norm(v))
-          print(np.linalg.norm(w))
+          plotRobot(qCur, 0)
+
+     elif not finishedArm:
+          finishedArm = True
+          finalIterations = i
+          print(f"Total iterations = {finalIterations}")
+          print(f"Final ||v|| = {np.linalg.norm(v*theta):.3} mm")
+          print(f"Final ||w|| = {np.linalg.norm(w*theta):.3} radians")
           print(" ")
-          plotRobot(qCur)
+          print("Closing wrist...")
+          print(" ")
+     
+     elif not finishedWrist:
+          qWristVal = (i - finalIterations) * np.pi/16 #pi/16 rads per loop iteration
+          if qWristVal > np.pi*(3/4):
+               qWristVal = np.pi*(3/4)
+               print("Wrist closed!")
+               finishedWrist = True
+
+          plotRobot(qCur, qWristVal)
 
 
 def computeKinematicChain():
@@ -142,10 +165,11 @@ def computeKinematicChain():
           b_E_s3 = sym.simplify(np.matmul(b_E_s2, s2_E_s3))
           b_E_t = sym.simplify(np.matmul(b_E_s3, s3_E_t))
 
-          t_E_leftFingerBase = frame.create2DFrame(0, np.array([0, 0.25]))
-          t_E_leftFingerTip = frame.create2DFrame(0, np.array([0.25, 0.25]))
-          t_E_rightFingerBase = frame.create2DFrame(0, np.array([0, -0.25]))
-          t_E_rightFingerTip = frame.create2DFrame(0, np.array([0.25, -0.25]))
+          qWristInMM = qWrist * (0.25/np.pi) # pi rad = 0.25 mm travel of fingers
+          t_E_leftFingerBase = frame.create2DFrame(0, np.array([0, 0.25 - qWristInMM]))
+          t_E_leftFingerTip = frame.create2DFrame(0, np.array([0.25, 0.25 - qWristInMM]))
+          t_E_rightFingerBase = frame.create2DFrame(0, np.array([0, -0.25 + qWristInMM]))
+          t_E_rightFingerTip = frame.create2DFrame(0, np.array([0.25, -0.25 + qWristInMM]))
 
           b_E_leftFingerBase = sym.simplify(np.matmul(b_E_t, t_E_leftFingerBase))
           b_E_leftFingerTip = sym.simplify(np.matmul(b_E_t, t_E_leftFingerTip))
@@ -218,7 +242,7 @@ def computeManipulatorJacobian(b_E_t, qs_symbolic):
      return Jb
 
 
-def plotRobot(qs):
+def plotRobot(qs, qWristVal):
     s1 = sym.Array([row[2] for row in b_E_s1]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
          q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
     s2 = sym.Array([row[2] for row in b_E_s2]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
@@ -232,13 +256,13 @@ def plotRobot(qs):
     jointYVals = [0, s1[1], s2[1], s3[1], t[1]]
 
     leftFingerBase = sym.Array([row[2] for row in b_E_leftFingerBase]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
-         q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
+         q3:qs[3], qWrist:qWristVal, l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
     leftFingerTip = sym.Array([row[2] for row in b_E_leftFingerTip]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
-         q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
+         q3:qs[3], qWrist:qWristVal, l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
     rightFingerBase = sym.Array([row[2] for row in b_E_rightFingerBase]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
-         q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
+         q3:qs[3], qWrist:qWristVal, l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
     rightFingerTip = sym.Array([row[2] for row in b_E_rightFingerTip]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
-         q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
+         q3:qs[3], qWrist:qWristVal, l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
     
     plt.clf()
 

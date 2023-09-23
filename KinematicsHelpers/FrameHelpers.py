@@ -19,7 +19,6 @@ def create2DFrame(theta, translationVec):
 # Computes the symbolic form of the analytic jacobian of a 2D robot
 def compute2DAnalyticJacobian(b_E_t, qs_symbolic):
     translationVec = np.array([rows[2] for rows in b_E_t])
-
     Ja = np.empty((0,2))
 
     for q in qs_symbolic:
@@ -28,6 +27,21 @@ def compute2DAnalyticJacobian(b_E_t, qs_symbolic):
         Ja = np.append(Ja, np.array([[dx_dqi, dy_dqi]]), axis=0)
 
     return sym.simplify(np.transpose(Ja))
+
+
+# Computes the symbolic form of the body/geometric jacobian of a 2D robot
+def compute2DManipulatorJacobian(b_E_t, qs_symbolic):
+    Jb = np.empty((0,3))
+
+    for q in qs_symbolic:
+        twist_MAT = np.matmul(computeInverseTransform2D(b_E_t), sym.diff(b_E_t, q))
+        w = extractSkewSym2D(twist_MAT)
+        v = np.array([twist_MAT[0][2], twist_MAT[1][2]])
+
+        twist_VEC = np.hstack((v, w))
+        Jb = np.append(Jb, np.array([twist_VEC]), axis=0)
+    
+    return sym.simplify(np.transpose(Jb))
 
 
 # Computes the position component of the forward kinematics of a 2D robot
@@ -88,21 +102,6 @@ def extractSkewSym2D(A):
 # Creates 2D skew symmetric matrix
 def createSkewSym2D(w):
     return np.array([[0, -w], [w, 0]])
-
-
-# Computes the symbolic form of the body/geometric jacobian of a 2D robot
-def compute2DManipulatorJacobian(b_E_t, qs_symbolic):
-    Jb = np.empty((0,3))
-
-    for q in qs_symbolic:
-        twist_MAT = np.matmul(computeInverseTransform2D(b_E_t), sym.diff(b_E_t, q))
-        w = extractSkewSym2D(twist_MAT)
-        v = np.array([twist_MAT[0][2], twist_MAT[1][2]])
-
-        twist_VEC = np.hstack((v, w))
-        Jb = np.append(Jb, np.array([twist_VEC]), axis=0)
-    
-    return sym.simplify(np.transpose(Jb))
 
 
 # Computes the twist coordiates from current tool position to desired tool position
