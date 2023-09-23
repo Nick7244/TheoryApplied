@@ -59,17 +59,17 @@ def main():
 
     global xDes
     xInit = frame.get2DFKPosition(b_E_t, qs_symbolic, qInit, lengths_symbolic, lengths).astype(float)
-    xDes = np.array([-2, 2])
+#     xDes = np.array([-2, 2])
 #     xDes = np.array([2, -0.5])
 #     xDes = np.array([-0.75, -0.25])
-#     xDes = np.array([0, -1])
+    xDes = np.array([0, -1])
 
     global thetaDes
     global b_E_d
-    thetaDes = 3*np.pi/4
+#     thetaDes = 3*np.pi/4
 #     thetaDes = -np.pi/2
 #     thetaDes = np.pi/4
-#     thetaDes = 0
+    thetaDes = 0
     b_E_d = frame.create2DFrame(thetaDes, xDes)
 
     plt.figure(figsize=(6,6))

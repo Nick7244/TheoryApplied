@@ -125,7 +125,7 @@ def computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qs, lengths_symbol
     t_R_d = extractRotationMatrix2D(t_E_d)
     t_T_d = extractTranslationVector2D(t_E_d)
 
-    theta = np.arccos((np.trace(t_R_d)) / 2) # This is different between 2D & 3D
+    theta = np.arccos(np.trace(t_R_d) / 2) # This is different between 2D & 3D
 
     if theta == 0:
         w = 0
