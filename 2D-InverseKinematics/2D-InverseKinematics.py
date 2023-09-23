@@ -43,24 +43,38 @@ def main():
     global b_E_leftFingerTip
     global b_E_rightFingerBase
     global b_E_rightFingerTip
-    global Ja
 
     b_E_s0, b_E_s1, b_E_s2, b_E_s3, b_E_t, b_E_leftFingerBase, b_E_leftFingerTip,\
      b_E_rightFingerBase, b_E_rightFingerTip = computeKinematicChain()
+    
+    global Ja
     Ja = computeAnalyticJacobian(b_E_t, qs_symbolic)
 
-    Jb = frame.compute2DManipulatorJacobian(b_E_t, qs_symbolic)
+    global Jb
+    Jb = computeManipulatorJacobian(b_E_t, qs_symbolic)
 
     global lengths
     lengths = [1, 1, 1, 1]
-    qInit = [sym.pi/2, -sym.pi/4, -sym.pi/4, -sym.pi/4]
+    qInit = [np.pi/2, -np.pi/4, -np.pi/4, -np.pi/4]
 
     global xDes
     xInit = frame.get2DFKPosition(b_E_t, qs_symbolic, qInit, lengths_symbolic, lengths).astype(float)
-    xDes = np.array([3, -0.5])
+    xDes = np.array([-2, 2])
+#     xDes = np.array([2, -0.5])
+#     xDes = np.array([-0.75, -0.25])
+#     xDes = np.array([0, -1])
+
+    global thetaDes
+    global b_E_d
+    thetaDes = 3*np.pi/4
+#     thetaDes = -np.pi/2
+#     thetaDes = np.pi/4
+#     thetaDes = 0
+    b_E_d = frame.create2DFrame(thetaDes, xDes)
 
     plt.figure(figsize=(6,6))
-    animation = ani.FuncAnimation(plt.gcf(), runIK, fargs=(qInit, xInit), interval = 100, cache_frame_data=False)
+#     animation = ani.FuncAnimation(plt.gcf(), runIK, fargs=(qInit, xInit), interval = 100, cache_frame_data=False)
+    animation = ani.FuncAnimation(plt.gcf(), runFrameIK, fargs=(qInit,), interval = 100, cache_frame_data=False)
     plt.show()
 
 
@@ -84,7 +98,35 @@ def runIK(i, qInit, xInit):
        xCur = frame.get2DFKPosition(b_E_t, qs_symbolic, qCur, lengths_symbolic, lengths).astype(float)
        print(i)
        print(np.linalg.norm(xDes - xCur))
+       print(" ")
        plotRobot(qCur)
+
+
+def runFrameIK(i, qInit):
+     global qCur
+
+     if i == 0:
+          qCur = qInit
+     
+     alpha = 0.1
+     v_thresh = 0.005 # 5 mm
+     w_thresh = 5*np.pi/180 # 5 degrees in radians ~= 0.0872664626111
+
+     [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
+     twist_Vec = np.append(v, w) * theta
+
+     if np.linalg.norm(v) > v_thresh or np.linalg.norm(w) > w_thresh:
+          Jb_num = np.array(Jb.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
+                                  q3:qCur[3], l0:lengths[0], l1:lengths[1], \
+                                   l2:lengths[2], l3:lengths[3]})).astype(float)
+          
+          qCur = qCur + alpha * np.matmul(frame.computeRightPseudoInverse(Jb_num), twist_Vec)
+          
+          print(i)
+          print(np.linalg.norm(v))
+          print(np.linalg.norm(w))
+          print(" ")
+          plotRobot(qCur)
 
 
 def computeKinematicChain():
@@ -164,6 +206,18 @@ def computeAnalyticJacobian(b_E_t, qs_symbolic):
      return Ja
 
 
+def computeManipulatorJacobian(b_E_t, qs_symbolic):
+     if not os.path.isfile("2D-InverseKinematics/Frames/Jb.pkl"):
+        Jb = frame.compute2DManipulatorJacobian(b_E_t, qs_symbolic)
+        with open('2D-InverseKinematics/Frames/Jb.pkl', 'wb') as file:
+           dill.dump(Jb, file)
+     else:
+        with open('2D-InverseKinematics/Frames/Jb.pkl', 'rb') as file:
+           Jb = dill.load(file)
+     
+     return Jb
+
+
 def plotRobot(qs):
     s1 = sym.Array([row[2] for row in b_E_s1]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
          q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
@@ -194,6 +248,7 @@ def plotRobot(qs):
     plt.plot([rightFingerBase[0], rightFingerTip[0]], [rightFingerBase[1], rightFingerTip[1]], linestyle="-", color="#136891")
     
     plt.plot(xDes[0], xDes[1], marker="o", markersize=4, markeredgecolor="black", markerfacecolor="black")
+    plt.arrow(xDes[0], xDes[1], 0.3*np.cos(thetaDes), 0.3*np.sin(thetaDes), head_width=0.1, head_length=0.1, fc='k', ec='k')
 
     plt.plot(jointXVals[0], jointYVals[0], marker="o", markersize=4, markeredgecolor="black", markerfacecolor="black")
     plt.plot(jointXVals[1], jointYVals[1], marker="o", markersize=4, markeredgecolor="red", markerfacecolor="red")

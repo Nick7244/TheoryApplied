@@ -4,7 +4,7 @@ import sympy as sym
 # Creates a 2D homogenous frame from an angle and translation vector
 def create2DFrame(theta, translationVec):
     if not isinstance(translationVec, np.ndarray):
-        raise TypeError("Translation vectory is not a numpy array." + \
+        raise TypeError("Translation vector is not a numpy array." + \
             " Ensure only numpy arrays are passed for the translation vector." + \
                 f" Type is {type(translationVec)}.")
     if not translationVec.shape == (2,):
@@ -80,13 +80,23 @@ def computeInverseTransform2D(b_E_t):
     return t_E_b
 
 
+# Extracts the skew symmetric values from a 2D matrix
+def extractSkewSym2D(A):
+    return A[1][0]
+
+
+# Creates 2D skew symmetric matrix
+def createSkewSym2D(w):
+    return np.array([[0, -w], [w, 0]])
+
+
 # Computes the symbolic form of the body/geometric jacobian of a 2D robot
 def compute2DManipulatorJacobian(b_E_t, qs_symbolic):
     Jb = np.empty((0,3))
 
     for q in qs_symbolic:
         twist_MAT = np.matmul(computeInverseTransform2D(b_E_t), sym.diff(b_E_t, q))
-        w = twist_MAT[1][0]
+        w = extractSkewSym2D(twist_MAT)
         v = np.array([twist_MAT[0][2], twist_MAT[1][2]])
 
         twist_VEC = np.hstack((v, w))
@@ -98,19 +108,35 @@ def compute2DManipulatorJacobian(b_E_t, qs_symbolic):
 # Computes the twist coordiates from current tool position to desired tool position
 # b_E_t = tool w.r.t. base
 # b_E_d = desired w.r.t. base
-def computeDesiredTwistCoordinates(b_E_t, b_E_d, qs, lengths):
-    t_E_d = np.matmul(computeInverseTransform2D(b_E_t), b_E_d).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
-         q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
+def computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qs, lengths_symbolic, lengths):
+    q0 = qs_symbolic[0]
+    q1 = qs_symbolic[1]
+    q2 = qs_symbolic[2]
+    q3 = qs_symbolic[3]
+    l0 = lengths_symbolic[0]
+    l1 = lengths_symbolic[1]
+    l2 = lengths_symbolic[2]
+    l3 = lengths_symbolic[3]
+
+    t_E_d_np = np.matmul(computeInverseTransform2D(b_E_t), b_E_d)
+    t_E_d = np.array(sym.Array(t_E_d_np).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
+         q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})).astype(float)
     
     t_R_d = extractRotationMatrix2D(t_E_d)
     t_T_d = extractTranslationVector2D(t_E_d)
 
-    theta = np.arccos((np.trace(t_R_d) - 1) / 2)
+    theta = np.arccos((np.trace(t_R_d)) / 2) # This is different between 2D & 3D
 
     if theta == 0:
         w = 0
-        t_T_d_norm = t_T_d / np.linalg.norm(t_T_d)
-        v = np.array([t_T_d_norm[0], t_T_d_norm[1]])
-        twist_VEC = np.transpose(np.hstack((v, w)))
+        t_T_d_norm = np.linalg.norm(t_T_d)
+        t_T_d_unit = t_T_d / t_T_d_norm
+        v = np.array([t_T_d_unit[0], t_T_d_unit[1]])
+        theta = t_T_d_norm
     else:
-        
+        w = (1 / (2*np.sin(theta))) * extractSkewSym2D(t_R_d - np.transpose(t_R_d))
+        w_hat = createSkewSym2D(w)
+        v = np.transpose(np.matmul(np.linalg.inv(theta*np.identity(2) + (1 - np.cos(theta))*w_hat +\
+                          (theta - np.sin(theta))*np.matmul(w_hat, w_hat)), t_T_d))
+    
+    return [v, w, theta]
