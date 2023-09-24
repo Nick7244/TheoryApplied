@@ -36,6 +36,9 @@ def main():
     qs_symbolic = [q0, q1, q2, q3]
     lengths_symbolic = [l0, l1, l2, l3]
 
+    global lengths
+    lengths = [1, 1, 1, 1]
+
     global b_E_s0
     global b_E_s1
     global b_E_s2
@@ -46,36 +49,22 @@ def main():
     global b_E_rightFingerBase
     global b_E_rightFingerTip
 
+    # Compute kinematic chains
     b_E_s0, b_E_s1, b_E_s2, b_E_s3, b_E_t, b_E_leftFingerBase, b_E_leftFingerTip,\
      b_E_rightFingerBase, b_E_rightFingerTip = computeKinematicChain()
     
+    # Compute analytic Jacobian (for position IK)
     global Ja
     Ja = computeAnalyticJacobian(b_E_t, qs_symbolic)
 
+    # Compute manipulator Jacobian (for whole frame IK)
     global Jb
     Jb = computeManipulatorJacobian(b_E_t, qs_symbolic)
 
-    global lengths
-    lengths = [1, 1, 1, 1]
+    # Define initial pose
     qInit = [np.pi/2, -np.pi/4, np.pi/4, np.pi/2]
 
-    global xDes
-    xInit = frame.get2DFKPosition(b_E_t, qs_symbolic, qInit, lengths_symbolic, lengths).astype(float)
-#     xDes = np.array([-2, 2])
-#     xDes = np.array([2, -0.5])
-#     xDes = np.array([2, -0.5])
-#     xDes = np.array([-0.75, -0.25])
-    xDes = np.array([0, -1])
-
-#     global thetaDes
-#     global b_E_d
-#     thetaDes = 3*np.pi/4
-#     thetaDes = -np.pi/2
-#     thetaDes = -np.pi/4
-#     thetaDes = np.pi/4
-#     thetaDes = 0
-#     b_E_d = frame.create2DFrame(thetaDes, xDes)
-
+    # Define the motions of the pick-and-place
     pickUpOffsetLocation = (-np.pi/2, np.array([-2, 0.5]))
     pickUpLocation = (-np.pi/2, np.array([-2, 0]))
     intermediate1 = (np.pi, np.array([-2.5, 2.5]))
@@ -88,13 +77,16 @@ def main():
              intermediate1, intermediate2, intermediate3, dropOffOffsetLocation,\
                dropOffLocation, "wrist open", dropOffOffsetLocation]
 
+    # Run the pick-and-place movement
     plt.figure(figsize=(6,6))
-#     animation = ani.FuncAnimation(plt.gcf(), runIK, fargs=(qInit, xInit), interval = 100, cache_frame_data=False)
-    animation = ani.FuncAnimation(plt.gcf(), runFrameIK, fargs=(qInit, poses), interval = 100, cache_frame_data=False)
+    animation = ani.FuncAnimation(plt.gcf(), runMotionControlFSM, fargs=(qInit, poses), interval = 100, cache_frame_data=False)
     plt.show()
 
+    #animation = ani.FuncAnimation(plt.gcf(), runResolvedRatePositionIK, fargs=(qInit, xInit), interval = 100, cache_frame_data=False)
 
-def runIK(i, qInit, xInit):
+
+# Resolved rate 2D position IK
+def runResolvedRatePositionIK(i, qInit, xInit):
     global qCur
     global xCur
 
@@ -118,7 +110,58 @@ def runIK(i, qInit, xInit):
        plotRobot(qCur, 0)
 
 
-def runFrameIK(i, qInit, poses):
+# Resolved rate 2D homogenous frame IK
+def runResolvedRateFrameIK(b_E_t, b_E_d):
+     global qCur
+
+     alpha = 0.25
+     v_thresh = 0.01 # 1 cm
+     w_thresh = 5*np.pi/180 # 5 degrees in radians ~= 0.0872664626111
+
+     [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
+     twist_Vec = np.append(v, w) * theta
+
+     if np.linalg.norm(v*theta) > v_thresh or np.linalg.norm(w*theta) > w_thresh:
+          Jb_num = np.array(Jb.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
+                              q3:qCur[3], l0:lengths[0], l1:lengths[1], \
+                                   l2:lengths[2], l3:lengths[3]})).astype(float)
+          
+          qCur = qCur + alpha * np.matmul(frame.computeRightPseudoInverse(Jb_num), twist_Vec)
+          return [False, np.linalg.norm(v*theta), np.linalg.norm(w*theta)]
+     
+     return [True, np.linalg.norm(v*theta), np.linalg.norm(w*theta)]
+     
+
+# Closed the wrist at a fixed speed
+def closeWrist(i):
+     global qWristVal
+     global finalIterations
+
+     qWristVal = qWristVal + (i - finalIterations) * np.pi/32 # pi/32 rads per loop iteration
+
+     if qWristVal >= np.pi*(3/4):
+          qWristVal = np.pi*(3/4)
+          return True
+     
+     return False
+
+
+# Opens the wrist at a fixed speed
+def openWrist(i):
+     global qWristVal
+     global finalIterations
+
+     qWristVal = qWristVal - (i - finalIterations) * np.pi/32 # pi/32 rads per loop iteration
+
+     if qWristVal <= 0:
+          qWristVal = 0
+          return True
+     
+     return False
+
+
+# Runs the motion control FSM for transitioning between movements
+def runMotionControlFSM(i, qInit, poses):
      global qCur
      global finalIterations
      global poseFSM
@@ -127,6 +170,7 @@ def runFrameIK(i, qInit, poses):
      global xDes
      global finishWristIter
      global wristFinished
+     global wait
 
      if i == 0:
           qCur = qInit
@@ -135,43 +179,45 @@ def runFrameIK(i, qInit, poses):
           qWristVal = 0
           finishWristIter = 0
           wristFinished = False
+          wait = False
+     
+     if poseFSM >= len(poses):
+          return
 
      pose = poses[poseFSM]
 
      if type(pose) == str:
-          if pose == "wrist close":
-               if not wristFinished:
-                    qWristVal = qWristVal + (i - finalIterations) * np.pi/32 # pi/32 rads per loop iteration
-
-                    if qWristVal >= np.pi*(3/4):
-                         qWristVal = np.pi*(3/4)
-                         print("Wrist closed!")
-                         finishWristIter = i
-                         wristFinished = True
-               
-               elif wristFinished and i > finishWristIter + 5:
-                    finalIterations = i
-                    poseFSM = poseFSM + 1 # iterate poseFSM
-                    wristFinished = False
-
+          if pose == "wrist close": 
+               wristFinished = closeWrist(i)
                plotRobot(qCur, qWristVal)
+
+               if wristFinished and not wait:
+                    print("Wrist closed!")
+                    print(" ")  
+                    finishWristIter = i
+                    wait = True
+
+               if wait and i > finishWristIter + 5:
+                    finalIterations = i
+                    poseFSM = poseFSM + 1 # iterate poseFSM  
+                    wait = False  
+                    wristFinished = False           
 
           elif pose == "wrist open":
-               if not wristFinished:
-                    qWristVal = qWristVal + (i - finalIterations) * -np.pi/32 # -pi/32 rads per loop iteration
-                    
-                    if qWristVal <= 0:
-                         qWristVal = 0
-                         print("Wrist closed!")
-                         finishWristIter = i
-                         wristFinished = True
-               
-               elif wristFinished and i > finishWristIter + 5:
-                    finalIterations = i
-                    poseFSM = poseFSM + 1 # iterate poseFSM
-                    wristFinished = False
-
+               wristFinished = openWrist(i)
                plotRobot(qCur, qWristVal)
+               
+               if wristFinished and not wait:
+                    print("Wrist open!")
+                    print(" ")  
+                    finishWristIter = i
+                    wait = True
+
+               if wait and i > finishWristIter + 5:
+                    finalIterations = i
+                    poseFSM = poseFSM + 1 # iterate poseFSM  
+                    wait = False 
+                    wristFinished = False    
      
      else:
           thetaDes = pose[0]
@@ -182,31 +228,21 @@ def runFrameIK(i, qInit, poses):
                plotRobot(qCur, qWristVal)
                return
      
-          b_E_d = frame.create2DFrame(thetaDes, xDes) # pose = (thetaDes, xDes)
+          b_E_d = frame.create2DFrame(thetaDes, xDes)
 
-          alpha = 0.25
-          v_thresh = 0.01 # 1 cm
-          w_thresh = 5*np.pi/180 # 5 degrees in radians ~= 0.0872664626111
+          [finishedMovement, v_magnitude, w_magnitude] = runResolvedRateFrameIK(b_E_t, b_E_d)
+          plotRobot(qCur, qWristVal)
 
-          [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
-          twist_Vec = np.append(v, w) * theta
-
-          if np.linalg.norm(v*theta) > v_thresh or np.linalg.norm(w*theta) > w_thresh:
-               Jb_num = np.array(Jb.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
-                                   q3:qCur[3], l0:lengths[0], l1:lengths[1], \
-                                        l2:lengths[2], l3:lengths[3]})).astype(float)
-               
-               qCur = qCur + alpha * np.matmul(frame.computeRightPseudoInverse(Jb_num), twist_Vec)
-               plotRobot(qCur, qWristVal)
-          else:
+          if finishedMovement:
                finalIterations = i
                poseFSM = poseFSM + 1 # iterate poseFSM
-               print(f"Total iterations = {finalIterations}")
-               print(f"Final ||v|| = {np.linalg.norm(v*theta):.3} mm")
-               print(f"Final ||w|| = {np.linalg.norm(w*theta):.3} radians")
-               print(" ")
+               print(f"2D frame achieved:")
+               print(f"\tFinal ||v|| = {v_magnitude:.3} mm")
+               print(f"\tFinal ||w|| = {w_magnitude:.3} radians")
+               print(" ")               
 
 
+# Computes/loads the 2D kinematic chains for each link of the robot
 def computeKinematicChain():
      if not os.path.isfile("2D-InverseKinematics/Frames/b_E_t.pkl"):
           b_E_s0 = frame.create2DFrame(q0, np.array([0, 0]))
@@ -249,6 +285,7 @@ def computeKinematicChain():
                dill.dump(b_E_rightFingerBase, file)
           with open('2D-InverseKinematics/Frames/b_E_rightFingerTip.pkl', 'wb') as file:
                dill.dump(b_E_rightFingerTip, file)
+     
      else:
           with open('2D-InverseKinematics/Frames/b_E_s0.pkl', 'rb') as file:
                b_E_s0 = dill.load(file)
@@ -273,11 +310,13 @@ def computeKinematicChain():
              b_E_rightFingerBase, b_E_rightFingerTip]
 
 
+# Computes/loads the analytic jacobian
 def computeAnalyticJacobian(b_E_t, qs_symbolic):
      if not os.path.isfile("2D-InverseKinematics/Frames/Ja.pkl"):
         Ja = frame.compute2DAnalyticJacobian(b_E_t, qs_symbolic)
         with open('2D-InverseKinematics/Frames/Ja.pkl', 'wb') as file:
            dill.dump(Ja, file)
+     
      else:
         with open('2D-InverseKinematics/Frames/Ja.pkl', 'rb') as file:
            Ja = dill.load(file)
@@ -285,11 +324,13 @@ def computeAnalyticJacobian(b_E_t, qs_symbolic):
      return Ja
 
 
+# Computes/loads the manipulator jacobian
 def computeManipulatorJacobian(b_E_t, qs_symbolic):
      if not os.path.isfile("2D-InverseKinematics/Frames/Jb.pkl"):
         Jb = frame.compute2DManipulatorJacobian(b_E_t, qs_symbolic)
         with open('2D-InverseKinematics/Frames/Jb.pkl', 'wb') as file:
            dill.dump(Jb, file)
+     
      else:
         with open('2D-InverseKinematics/Frames/Jb.pkl', 'rb') as file:
            Jb = dill.load(file)
@@ -297,6 +338,7 @@ def computeManipulatorJacobian(b_E_t, qs_symbolic):
      return Jb
 
 
+# Plots the robot
 def plotRobot(qs, qWristVal):
     s1 = sym.Array([row[2] for row in b_E_s1]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
          q3:qs[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
