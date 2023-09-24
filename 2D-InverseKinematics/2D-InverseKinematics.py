@@ -67,15 +67,12 @@ def main():
     # Define the motions of the pick-and-place
     pickUpOffsetLocation = (-np.pi/2, np.array([-2, 0.5]))
     pickUpLocation = (-np.pi/2, np.array([-2, 0]))
-    intermediate1 = (np.pi, np.array([-2.5, 2.5]))
-    intermediate2 = (np.pi/2, np.array([0.1, 3.8]))
-    intermediate3 = (0, np.array([2.5, 2.5]))
     dropOffOffsetLocation = (-np.pi/2, np.array([2, 0.5]))
     dropOffLocation = (-np.pi/2, np.array([2, 0]))
 
     poses = [pickUpOffsetLocation, pickUpLocation, "wrist close", pickUpOffsetLocation,\
-             intermediate1, intermediate2, intermediate3, dropOffOffsetLocation,\
-               dropOffLocation, "wrist open", dropOffOffsetLocation]
+             "tPoseLeft", "up", "tPoseRight", dropOffOffsetLocation,dropOffLocation, \
+               "wrist open", dropOffOffsetLocation]
 
     # Run the pick-and-place movement
     plt.figure(figsize=(6,6))
@@ -160,6 +157,33 @@ def openWrist(i):
      return False
 
 
+# Perform time synchronized movement of all joints
+def syncMoveToDesJoints(qDes, desIterations, init):
+     global dqdi
+     global qCur
+     global xDes
+     global thetaDes
+     
+     if not init:
+          dqdi = (qDes - qCur) / desIterations
+          
+          b_T_tDes = np.array(sym.Array([row[2] for row in b_E_t]).subs({q0:qDes[0], q1:qDes[1], q2:qDes[2],\
+               q3:qDes[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})).astype(float)
+          b_R_tDes = np.array(sym.Array([[b_E_t[0][0], b_E_t[0][1]], [b_E_t[1][0], b_E_t[1][1]]]).subs({q0:qDes[0],\
+               q1:qDes[1], q2:qDes[2], q3:qDes[3], l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})).astype(float)
+          
+          xDes = np.array([b_T_tDes[0], b_T_tDes[1]])
+          thetaDes = np.arccos(np.trace(b_R_tDes) / 2)
+          init = True
+     
+     qCur = qCur + dqdi
+
+     if np.linalg.norm(qDes - qCur) <= 5*np.pi/180: # 5 degrees in radians ~= 0.0872664626111
+          return [init, True]
+     
+     return [init, False]
+
+
 # Runs the motion control FSM for transitioning between movements
 def runMotionControlFSM(i, qInit, poses):
      global qCur
@@ -171,6 +195,7 @@ def runMotionControlFSM(i, qInit, poses):
      global finishWristIter
      global wristFinished
      global wait
+     global syncMoveInit
 
      if i == 0:
           qCur = qInit
@@ -180,6 +205,7 @@ def runMotionControlFSM(i, qInit, poses):
           finishWristIter = 0
           wristFinished = False
           wait = False
+          syncMoveInit = False
      
      if poseFSM >= len(poses):
           return
@@ -217,7 +243,37 @@ def runMotionControlFSM(i, qInit, poses):
                     finalIterations = i
                     poseFSM = poseFSM + 1 # iterate poseFSM  
                     wait = False 
-                    wristFinished = False    
+                    wristFinished = False  
+
+          elif pose == "tPoseLeft":
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, np.pi/2, 0]), 20, syncMoveInit)
+               plotRobot(qCur, qWristVal)
+
+               if syncMoveDone:
+                    print("Sync move done!")
+                    print(" ")
+                    poseFSM = poseFSM + 1 # iterate poseFSM  
+                    syncMoveInit = False
+
+          elif pose == "tPoseRight":
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, -np.pi/2, 0]), 20, syncMoveInit)
+               plotRobot(qCur, qWristVal)
+
+               if syncMoveDone:
+                    print("Sync move done!")
+                    print(" ")
+                    poseFSM = poseFSM + 1 # iterate poseFSM  
+                    syncMoveInit = False
+
+          elif pose == "up":
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, 0, 0]), 20, syncMoveInit)
+               plotRobot(qCur, qWristVal)
+
+               if syncMoveDone:
+                    print("Sync move done!")
+                    print(" ")
+                    poseFSM = poseFSM + 1 # iterate poseFSM  
+                    syncMoveInit = False
      
      else:
           thetaDes = pose[0]
@@ -377,8 +433,8 @@ def plotRobot(qs, qWristVal):
     plt.plot(jointXVals[3], jointYVals[3], marker="o", markersize=4, markeredgecolor="red", markerfacecolor="red")
     plt.plot(jointXVals[4], jointYVals[4], marker="o", markersize=4, markeredgecolor="green", markerfacecolor="green")
 
-    plt.xlim((-4, 4))
-    plt.ylim((-4, 4))
+    plt.xlim((-5, 5))
+    plt.ylim((-3, 5))
 
 
 if __name__ == "__main__":
