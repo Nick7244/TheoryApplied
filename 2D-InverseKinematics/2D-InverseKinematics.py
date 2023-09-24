@@ -113,7 +113,7 @@ def runResolvedRateFrameIK(b_E_t, b_E_d):
 
      alpha = 0.25
      v_thresh = 0.01 # 1 cm
-     w_thresh = 5*np.pi/180 # 5 degrees in radians ~= 0.0872664626111
+     w_thresh = 5*np.pi/180 # 5 degrees in radians ~= 0.0873 rad
 
      [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
      twist_Vec = np.append(v, w) * theta
@@ -178,7 +178,7 @@ def syncMoveToDesJoints(qDes, desIterations, init):
      
      qCur = qCur + dqdi
 
-     if np.linalg.norm(qDes - qCur) <= 3*np.pi/180: # 3 degrees in radians ~= 0.0872664626111
+     if np.linalg.norm(qDes - qCur) <= 3*np.pi/180: # 3 degrees in radians ~= 0.0524 rad
           return [init, True]
      
      return [init, False]
