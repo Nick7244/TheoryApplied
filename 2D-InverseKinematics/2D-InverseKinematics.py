@@ -57,7 +57,7 @@ def main():
 
     global lengths
     lengths = [1, 1, 1, 1]
-    qInit = [np.pi/2, -np.pi/4, -np.pi/4, -np.pi/4]
+    qInit = [np.pi/2, -np.pi/4, np.pi/4, np.pi/2]
 
     global xDes
     xInit = frame.get2DFKPosition(b_E_t, qs_symbolic, qInit, lengths_symbolic, lengths).astype(float)
@@ -67,18 +67,30 @@ def main():
 #     xDes = np.array([-0.75, -0.25])
     xDes = np.array([0, -1])
 
-    global thetaDes
-    global b_E_d
+#     global thetaDes
+#     global b_E_d
 #     thetaDes = 3*np.pi/4
 #     thetaDes = -np.pi/2
 #     thetaDes = -np.pi/4
 #     thetaDes = np.pi/4
-    thetaDes = 0
-    b_E_d = frame.create2DFrame(thetaDes, xDes)
+#     thetaDes = 0
+#     b_E_d = frame.create2DFrame(thetaDes, xDes)
+
+    pickUpOffsetLocation = (-np.pi/2, np.array([-2, 0.5]))
+    pickUpLocation = (-np.pi/2, np.array([-2, 0]))
+    intermediate1 = (np.pi, np.array([-2.5, 2.5]))
+    intermediate2 = (np.pi/2, np.array([0.1, 3.8]))
+    intermediate3 = (0, np.array([2.5, 2.5]))
+    dropOffOffsetLocation = (-np.pi/2, np.array([2, 0.5]))
+    dropOffLocation = (-np.pi/2, np.array([2, 0]))
+
+    poses = [pickUpOffsetLocation, pickUpLocation, "wrist close", pickUpOffsetLocation,\
+             intermediate1, intermediate2, intermediate3, dropOffOffsetLocation,\
+               dropOffLocation, "wrist open", dropOffOffsetLocation]
 
     plt.figure(figsize=(6,6))
 #     animation = ani.FuncAnimation(plt.gcf(), runIK, fargs=(qInit, xInit), interval = 100, cache_frame_data=False)
-    animation = ani.FuncAnimation(plt.gcf(), runFrameIK, fargs=(qInit,), interval = 100, cache_frame_data=False)
+    animation = ani.FuncAnimation(plt.gcf(), runFrameIK, fargs=(qInit, poses), interval = 100, cache_frame_data=False)
     plt.show()
 
 
@@ -106,50 +118,93 @@ def runIK(i, qInit, xInit):
        plotRobot(qCur, 0)
 
 
-def runFrameIK(i, qInit):
+def runFrameIK(i, qInit, poses):
      global qCur
-     global finishedArm
-     global finishedWrist
      global finalIterations
+     global poseFSM
+     global qWristVal
+     global thetaDes
+     global xDes
+     global finishWristIter
+     global wristFinished
 
      if i == 0:
-          finishedArm = False
-          finishedWrist = False
           qCur = qInit
+          finalIterations = 0
+          poseFSM = 0
+          qWristVal = 0
+          finishWristIter = 0
+          wristFinished = False
+
+     pose = poses[poseFSM]
+
+     if type(pose) == str:
+          if pose == "wrist close":
+               if not wristFinished:
+                    qWristVal = qWristVal + (i - finalIterations) * np.pi/32 # pi/32 rads per loop iteration
+
+                    if qWristVal >= np.pi*(3/4):
+                         qWristVal = np.pi*(3/4)
+                         print("Wrist closed!")
+                         finishWristIter = i
+                         wristFinished = True
+               
+               elif wristFinished and i > finishWristIter + 5:
+                    finalIterations = i
+                    poseFSM = poseFSM + 1 # iterate poseFSM
+                    wristFinished = False
+
+               plotRobot(qCur, qWristVal)
+
+          elif pose == "wrist open":
+               if not wristFinished:
+                    qWristVal = qWristVal + (i - finalIterations) * -np.pi/32 # -pi/32 rads per loop iteration
+                    
+                    if qWristVal <= 0:
+                         qWristVal = 0
+                         print("Wrist closed!")
+                         finishWristIter = i
+                         wristFinished = True
+               
+               elif wristFinished and i > finishWristIter + 5:
+                    finalIterations = i
+                    poseFSM = poseFSM + 1 # iterate poseFSM
+                    wristFinished = False
+
+               plotRobot(qCur, qWristVal)
      
-     alpha = 0.1
-     v_thresh = 0.005 # 5 mm
-     w_thresh = 5*np.pi/180 # 5 degrees in radians ~= 0.0872664626111
+     else:
+          thetaDes = pose[0]
+          xDes = pose[1]
 
-     [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
-     twist_Vec = np.append(v, w) * theta
-
-     if np.linalg.norm(v*theta) > v_thresh or np.linalg.norm(w*theta) > w_thresh:
-          Jb_num = np.array(Jb.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
-                                  q3:qCur[3], l0:lengths[0], l1:lengths[1], \
-                                   l2:lengths[2], l3:lengths[3]})).astype(float)
-          
-          qCur = qCur + alpha * np.matmul(frame.computeRightPseudoInverse(Jb_num), twist_Vec)
-          plotRobot(qCur, 0)
-
-     elif not finishedArm:
-          finishedArm = True
-          finalIterations = i
-          print(f"Total iterations = {finalIterations}")
-          print(f"Final ||v|| = {np.linalg.norm(v*theta):.3} mm")
-          print(f"Final ||w|| = {np.linalg.norm(w*theta):.3} radians")
-          print(" ")
-          print("Closing wrist...")
-          print(" ")
+          # wait a few iterations to begin to plot initial pose
+          if i < 10:
+               plotRobot(qCur, qWristVal)
+               return
      
-     elif not finishedWrist:
-          qWristVal = (i - finalIterations) * np.pi/16 #pi/16 rads per loop iteration
-          if qWristVal > np.pi*(3/4):
-               qWristVal = np.pi*(3/4)
-               print("Wrist closed!")
-               finishedWrist = True
+          b_E_d = frame.create2DFrame(thetaDes, xDes) # pose = (thetaDes, xDes)
 
-          plotRobot(qCur, qWristVal)
+          alpha = 0.25
+          v_thresh = 0.01 # 1 cm
+          w_thresh = 5*np.pi/180 # 5 degrees in radians ~= 0.0872664626111
+
+          [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
+          twist_Vec = np.append(v, w) * theta
+
+          if np.linalg.norm(v*theta) > v_thresh or np.linalg.norm(w*theta) > w_thresh:
+               Jb_num = np.array(Jb.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
+                                   q3:qCur[3], l0:lengths[0], l1:lengths[1], \
+                                        l2:lengths[2], l3:lengths[3]})).astype(float)
+               
+               qCur = qCur + alpha * np.matmul(frame.computeRightPseudoInverse(Jb_num), twist_Vec)
+               plotRobot(qCur, qWristVal)
+          else:
+               finalIterations = i
+               poseFSM = poseFSM + 1 # iterate poseFSM
+               print(f"Total iterations = {finalIterations}")
+               print(f"Final ||v|| = {np.linalg.norm(v*theta):.3} mm")
+               print(f"Final ||w|| = {np.linalg.norm(w*theta):.3} radians")
+               print(" ")
 
 
 def computeKinematicChain():
