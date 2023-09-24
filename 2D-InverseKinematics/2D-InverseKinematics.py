@@ -70,7 +70,7 @@ def main():
 
     ballRad = 0.25
     ballCenterPos = np.array([-1.5, ballRad])
-    ballMass = 10
+    ballMass = 20
 
     global wristClosed
     wristClosed = False
