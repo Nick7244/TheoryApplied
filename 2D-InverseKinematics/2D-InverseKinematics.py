@@ -247,7 +247,7 @@ def runMotionControlFSM(i, qInit, poses):
                     wristFinished = False  
 
           elif pose == "tPoseLeft":
-               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, np.pi/2, 0]), 30, syncMoveInit)
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, np.pi/2, 0]), 20, syncMoveInit)
                plotRobot(qCur, qWristVal)
 
                if syncMoveDone:
@@ -257,7 +257,7 @@ def runMotionControlFSM(i, qInit, poses):
                     syncMoveInit = False
 
           elif pose == "tPoseRight":
-               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, -np.pi/2, 0]), 30, syncMoveInit)
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, -np.pi/2, 0]), 20, syncMoveInit)
                plotRobot(qCur, qWristVal)
 
                if syncMoveDone:
@@ -267,7 +267,7 @@ def runMotionControlFSM(i, qInit, poses):
                     syncMoveInit = False
 
           elif pose == "up":
-               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, 0, 0]), 30, syncMoveInit)
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, 0, 0]), 20, syncMoveInit)
                plotRobot(qCur, qWristVal)
 
                if syncMoveDone:
