@@ -63,20 +63,36 @@ def main():
 
     # Define initial pose
     qInit = [np.pi/2, -np.pi/4, np.pi/4, np.pi/2]
+     
+    global ballRad
+    global ballCenterPos
+    global ballMass
+
+    ballRad = 0.25
+    ballCenterPos = np.array([-1.5, ballRad])
+    ballMass = 10
+
+    global wristClosed
+    wristClosed = False
 
     # Define the motions of the pick-and-place
-    pickUpOffsetLocation = (-np.pi/2, np.array([-2, 0.5]))
-    pickUpLocation = (-np.pi/2, np.array([-2, 0]))
-    dropOffOffsetLocation = (-np.pi/2, np.array([2, 0.5]))
-    dropOffLocation = (-np.pi/2, np.array([2, 0]))
+    pickUpOffsetLocation = (-np.pi/2, np.array([-1.5, 1.0]))
+    pickUpLocation = (-np.pi/2, np.array([-1.5, ballRad+0.3]))
+    dropOffOffsetLocation = (-np.pi/2, np.array([2, 1.0]))
+    dropOffLocation = (-np.pi/2, np.array([2, ballRad+0.5]))
 
     poses = [pickUpOffsetLocation, pickUpLocation, "wrist close", pickUpOffsetLocation,\
              "tPoseLeft", "up", "tPoseRight", dropOffOffsetLocation,dropOffLocation, \
                "wrist open", dropOffOffsetLocation]
 
-    # Run the pick-and-place movement
-    plt.figure(figsize=(6,6))
-    animation = ani.FuncAnimation(plt.gcf(), runMotionControlFSM, fargs=(qInit, poses), interval = 100, cache_frame_data=False)
+    # Create the figure
+    global fig
+    fig = plt.figure(figsize=(6,6))
+
+    # Run the pick-and-place movement    
+    global plotFreq
+    plotFreq = 100
+    animation = ani.FuncAnimation(plt.gcf(), runMotionControlFSM, fargs=(qInit, poses), interval = (1/plotFreq)*1000, cache_frame_data=False)
     plt.show()
 
     #animation = ani.FuncAnimation(plt.gcf(), runResolvedRatePositionIK, fargs=(qInit, xInit), interval = 100, cache_frame_data=False)
@@ -118,7 +134,7 @@ def runResolvedRateFrameIK(b_E_t, b_E_d):
      [v, w, theta] = frame.computeDesiredTwistCoordinates(b_E_t, b_E_d, qs_symbolic, qCur, lengths_symbolic, lengths)
      twist_Vec = np.append(v, w) * theta
 
-     if np.linalg.norm(v*theta) > v_thresh or np.linalg.norm(w*theta) > w_thresh:
+     if np.linalg.norm(v*theta) >= v_thresh or np.linalg.norm(w*theta) >= w_thresh:
           Jb_num = np.array(Jb.subs({q0:qCur[0], q1:qCur[1], q2:qCur[2],\
                               q3:qCur[3], l0:lengths[0], l1:lengths[1], \
                                    l2:lengths[2], l3:lengths[3]})).astype(float)
@@ -133,11 +149,16 @@ def runResolvedRateFrameIK(b_E_t, b_E_d):
 def closeWrist(i):
      global qWristVal
      global finalIterations
+     global wristClosed
 
      qWristVal = qWristVal + (i - finalIterations) * np.pi/32 # pi/32 rads per loop iteration
 
-     if qWristVal >= np.pi*(2/3):
-          qWristVal = np.pi*(2/3)
+     # 0.15mm to wrist radians (0.4mm totally close - 0.25mm space required for ball grab = 0.15mm closed)
+     closedPos = 0.15 / qWristRadToMm
+     
+     if qWristVal >= closedPos:
+          qWristVal = closedPos
+          wristClosed = True
           return True
      
      return False
@@ -147,11 +168,13 @@ def closeWrist(i):
 def openWrist(i):
      global qWristVal
      global finalIterations
+     global wristClosed
 
      qWristVal = qWristVal - (i - finalIterations) * np.pi/32 # pi/32 rads per loop iteration
 
      if qWristVal <= 0:
           qWristVal = 0
+          wristClosed = False
           return True
      
      return False
@@ -208,6 +231,7 @@ def runMotionControlFSM(i, qInit, poses):
           syncMoveInit = False
      
      if poseFSM >= len(poses):
+          plotRobot(qCur, qWristVal)
           return
 
      pose = poses[poseFSM]
@@ -302,6 +326,9 @@ def runMotionControlFSM(i, qInit, poses):
 
 # Computes/loads the 2D kinematic chains for each link of the robot
 def computeKinematicChain():
+     global qWristRadToMm
+     qWristRadToMm = 0.4/np.pi # pi rad = 0.4 mm travel of fingers = fully closed
+
      if not os.path.isfile("2D-InverseKinematics/Frames/b_E_t.pkl"):
           b_E_s0 = frame.create2DFrame(q0, np.array([0, 0]))
           s0_E_s1 = frame.create2DFrame(q1, np.array([l0, 0]))
@@ -314,11 +341,11 @@ def computeKinematicChain():
           b_E_s3 = sym.simplify(np.matmul(b_E_s2, s2_E_s3))
           b_E_t = sym.simplify(np.matmul(b_E_s3, s3_E_t))
 
-          qWristInMM = qWrist * (0.25/np.pi) # pi rad = 0.25 mm travel of fingers = fully closed
-          t_E_leftFingerBase = frame.create2DFrame(0, np.array([0, 0.25 - qWristInMM]))
-          t_E_leftFingerTip = frame.create2DFrame(0, np.array([0.25, 0.25 - qWristInMM]))
-          t_E_rightFingerBase = frame.create2DFrame(0, np.array([0, -0.25 + qWristInMM]))
-          t_E_rightFingerTip = frame.create2DFrame(0, np.array([0.25, -0.25 + qWristInMM]))
+          qWristInMM = qWrist * qWristRadToMm
+          t_E_leftFingerBase = frame.create2DFrame(0, np.array([0, 0.4 - qWristInMM]))
+          t_E_leftFingerTip = frame.create2DFrame(0, np.array([0.35, 0.4 - qWristInMM]))
+          t_E_rightFingerBase = frame.create2DFrame(0, np.array([0, -0.4 + qWristInMM]))
+          t_E_rightFingerTip = frame.create2DFrame(0, np.array([0.35, -0.4 + qWristInMM]))
 
           b_E_leftFingerBase = sym.simplify(np.matmul(b_E_t, t_E_leftFingerBase))
           b_E_leftFingerTip = sym.simplify(np.matmul(b_E_t, t_E_leftFingerTip))
@@ -421,6 +448,43 @@ def plotRobot(qs, qWristVal):
     
     plt.clf()
 
+    # plot floor
+    plt.plot([-5, 5], [0, 0], linestyle="-", color="k")
+
+    global ballCenterPos
+    global lastTPos
+    if wristClosed:
+          tPos = np.array([t[0], t[1]]).astype(float)
+          if isinstance(lastTPos, np.ndarray):
+               ballCenterPos = ballCenterPos + (tPos - lastTPos)
+               
+          distToolToBall = np.linalg.norm(tPos - ballCenterPos)
+          if distToolToBall <= ballRad + 0.1:
+               lastTPos = tPos
+               b_E_ball = np.matmul(b_E_t, frame.create2DFrame(0, np.array([distToolToBall, 0])))
+               ballTemp = sym.Array([row[2] for row in b_E_ball]).subs({q0:qs[0], q1:qs[1], q2:qs[2],\
+                    q3:qs[3], qWrist:qWristVal, l0:lengths[0], l1:lengths[1] ,l2:lengths[2], l3:lengths[3]})
+               ballCenterPos = np.array([ballTemp[0], ballTemp[1]]).astype(float)
+          else:
+               yVal = ballCenterPos[1] - 9.81*((1/plotFreq)**2)
+               if yVal < ballRad:
+                    yVal = ballRad
+
+               ballCenterPos = np.array([ballCenterPos[0], yVal])
+               lastTPos = 0
+    else:
+         yVal = ballCenterPos[1] - ballMass * 9.81 * ((1/plotFreq)**2)
+         if yVal < ballRad:
+               yVal = ballRad
+
+         ballCenterPos = np.array([ballCenterPos[0], yVal])
+         lastTPos = 0
+         
+    thetaCircle = np.linspace(0, 2*np.pi, 150)
+    a = ballCenterPos[0] + ballRad * np.cos(thetaCircle)
+    b = ballCenterPos[1] + ballRad * np.sin(thetaCircle)
+    plt.plot(a, b, color="r")
+
     plt.plot(jointXVals, jointYVals, linestyle="-", color="#136891")
     plt.plot([leftFingerBase[0], rightFingerBase[0]], [leftFingerBase[1], rightFingerBase[1]], linestyle="-", color="#136891")
     plt.plot([leftFingerBase[0], leftFingerTip[0]], [leftFingerBase[1], leftFingerTip[1]], linestyle="-", color="#136891")
@@ -436,7 +500,7 @@ def plotRobot(qs, qWristVal):
     plt.plot(jointXVals[4], jointYVals[4], marker="o", markersize=4, markeredgecolor="green", markerfacecolor="green")
 
     plt.xlim((-5, 5))
-    plt.ylim((-3, 5))
+    plt.ylim((-5, 5))
 
 
 if __name__ == "__main__":
