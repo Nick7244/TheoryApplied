@@ -178,7 +178,7 @@ def syncMoveToDesJoints(qDes, desIterations, init):
      
      qCur = qCur + dqdi
 
-     if np.linalg.norm(qDes - qCur) <= 5*np.pi/180: # 5 degrees in radians ~= 0.0872664626111
+     if np.linalg.norm(qDes - qCur) <= 3*np.pi/180: # 3 degrees in radians ~= 0.0872664626111
           return [init, True]
      
      return [init, False]
@@ -212,6 +212,7 @@ def runMotionControlFSM(i, qInit, poses):
 
      pose = poses[poseFSM]
 
+     # Wrist or joint command
      if type(pose) == str:
           if pose == "wrist close": 
                wristFinished = closeWrist(i)
@@ -246,7 +247,7 @@ def runMotionControlFSM(i, qInit, poses):
                     wristFinished = False  
 
           elif pose == "tPoseLeft":
-               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, np.pi/2, 0]), 20, syncMoveInit)
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, np.pi/2, 0]), 30, syncMoveInit)
                plotRobot(qCur, qWristVal)
 
                if syncMoveDone:
@@ -256,7 +257,7 @@ def runMotionControlFSM(i, qInit, poses):
                     syncMoveInit = False
 
           elif pose == "tPoseRight":
-               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, -np.pi/2, 0]), 20, syncMoveInit)
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, -np.pi/2, 0]), 30, syncMoveInit)
                plotRobot(qCur, qWristVal)
 
                if syncMoveDone:
@@ -266,7 +267,7 @@ def runMotionControlFSM(i, qInit, poses):
                     syncMoveInit = False
 
           elif pose == "up":
-               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, 0, 0]), 20, syncMoveInit)
+               [syncMoveInit, syncMoveDone] = syncMoveToDesJoints(np.array([np.pi/2, 0, 0, 0]), 30, syncMoveInit)
                plotRobot(qCur, qWristVal)
 
                if syncMoveDone:
@@ -275,6 +276,7 @@ def runMotionControlFSM(i, qInit, poses):
                     poseFSM = poseFSM + 1 # iterate poseFSM  
                     syncMoveInit = False
      
+     # Cartesian IK command
      else:
           thetaDes = pose[0]
           xDes = pose[1]
