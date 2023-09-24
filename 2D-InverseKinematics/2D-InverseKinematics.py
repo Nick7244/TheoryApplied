@@ -136,8 +136,8 @@ def closeWrist(i):
 
      qWristVal = qWristVal + (i - finalIterations) * np.pi/32 # pi/32 rads per loop iteration
 
-     if qWristVal >= np.pi*(3/4):
-          qWristVal = np.pi*(3/4)
+     if qWristVal >= np.pi*(2/3):
+          qWristVal = np.pi*(2/3)
           return True
      
      return False
@@ -314,7 +314,7 @@ def computeKinematicChain():
           b_E_s3 = sym.simplify(np.matmul(b_E_s2, s2_E_s3))
           b_E_t = sym.simplify(np.matmul(b_E_s3, s3_E_t))
 
-          qWristInMM = qWrist * (0.25/np.pi) # pi rad = 0.25 mm travel of fingers
+          qWristInMM = qWrist * (0.25/np.pi) # pi rad = 0.25 mm travel of fingers = fully closed
           t_E_leftFingerBase = frame.create2DFrame(0, np.array([0, 0.25 - qWristInMM]))
           t_E_leftFingerTip = frame.create2DFrame(0, np.array([0.25, 0.25 - qWristInMM]))
           t_E_rightFingerBase = frame.create2DFrame(0, np.array([0, -0.25 + qWristInMM]))
