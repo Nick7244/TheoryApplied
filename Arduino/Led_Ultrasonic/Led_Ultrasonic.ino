@@ -1,6 +1,7 @@
 #define LED_Pin 3
 #define Trig_Pin 4
 #define Echo_Pin 5
+#define Button_Pin 7
 
 float cm_per_us = 0.01715;
 int fsm_state;
@@ -17,6 +18,7 @@ void setup() {
   pinMode(Trig_Pin, OUTPUT);
   pinMode(Echo_Pin, INPUT);
   pinMode(LED_Pin, OUTPUT);
+  pinMode(Button_Pin, INPUT);
 
   // Initialize FSM
   fsm_state = UNDETECTED;
@@ -91,9 +93,8 @@ void loop() {
     }
 
     case LED_ON:
-      // TODO: MAKE THIS TURN OFF WHEN USER PRESSES BUTTON
-      bool buttonPressed = false;
-      if (buttonPressed)
+      // Once button is pressed, turn LED off
+      if (digitalRead(Button_Pin) == HIGH)
       {
         analogWrite(LED_Pin, 0);
         fsm_state = LED_OFF;        
