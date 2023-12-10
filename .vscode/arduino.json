@@ -1,0 +1,7 @@
+{
+    "port": "COM3",
+    "board": "arduino:avr:uno",
+    "programmer": "avrisp",
+    "sketch": "Arduino\\Led_+_Ultrasonic\\Led_+_Ultrasonic.ino",
+    "output": "../build"
+}
