@@ -1,13 +1,14 @@
-import numpy as np
-import sympy as sym
 import sys
-import matplotlib.pyplot as plt
-import matplotlib.animation as ani
 import os
-import dill
 
 sys.path.insert(0, 'c:\\Development\\TheoryApplied\\KinematicsHelpers')
 import FrameHelpers as frame
+
+import numpy as np
+import sympy as sym
+import matplotlib.pyplot as plt
+import matplotlib.animation as ani
+import dill
 
 def main():
     global q0
