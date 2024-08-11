@@ -11,9 +11,9 @@ def create2DFrame(theta, translationVec):
         raise TypeError("Translation vector must be a 2x1 vector." + \
             f" Shape is {translationVec.shape}.")
     
-    return np.array([[sym.cos(theta), -sym.sin(theta), translationVec[0]],\
-        [sym.sin(theta), sym.cos(theta), translationVec[1]],\
-            [0, 0, 1]])
+    return np.array([[sym.cos(theta),   -sym.sin(theta),    translationVec[0]],\
+                    [sym.sin(theta),    sym.cos(theta),     translationVec[1]],\
+                    [0,                 0,                  1]])
 
 
 # Computes the symbolic form of the analytic jacobian of a 2D robot

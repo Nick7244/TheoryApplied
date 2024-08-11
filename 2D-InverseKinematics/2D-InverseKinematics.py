@@ -69,18 +69,21 @@ def main():
     global ballCenterPos
     global ballMass
 
+    initX = -1.8
+    finalX = 0.3
+
     ballRad = 0.25
-    ballCenterPos = np.array([-1.5, ballRad])
+    ballCenterPos = np.array([initX, ballRad])
     ballMass = 20
 
     global wristClosed
     wristClosed = False
 
     # Define the motions of the pick-and-place
-    pickUpOffsetLocation = (-np.pi/2, np.array([-1.5, 1.0]))
-    pickUpLocation = (-np.pi/2, np.array([-1.5, ballRad+0.3]))
-    dropOffOffsetLocation = (-np.pi/2, np.array([2, 1.0]))
-    dropOffLocation = (-np.pi/2, np.array([2, ballRad+0.5]))
+    pickUpOffsetLocation = (-np.pi/2, np.array([initX, 1.0]))
+    pickUpLocation = (-np.pi/2, np.array([initX, ballRad+0.3]))
+    dropOffOffsetLocation = (-np.pi/2, np.array([finalX, 1.0]))
+    dropOffLocation = (-np.pi/2, np.array([finalX, ballRad+0.5]))
 
     poses = [pickUpOffsetLocation, pickUpLocation, "wrist close", pickUpOffsetLocation,\
              "tPoseLeft", "up", "tPoseRight", dropOffOffsetLocation,dropOffLocation, \
