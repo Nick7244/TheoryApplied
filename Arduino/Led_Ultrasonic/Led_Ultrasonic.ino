@@ -76,7 +76,7 @@ void loop() {
       while (true)
       {
         int t = millis() - startTime;
-        auto desiredVoltage = p * exp(r * double(t)) - p;
+        auto desiredVoltage = p * exp(r * double(t));
         int pwm = round(desiredVoltage * (255.0/5.0));
 
         if (pwm > 255) { pwm = 255; }
