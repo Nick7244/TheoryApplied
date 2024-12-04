@@ -2,6 +2,7 @@
 #define ENGAGE_A4988_PIN 2
 #define DIR_PIN 7
 #define STEP_PIN 8
+#define POT_PIN A1
 
 int count = 0;
 
@@ -21,28 +22,50 @@ void setup()
 
   digitalWrite(DIR_PIN, HIGH);
 
+  pinMode(POT_PIN, INPUT);
 }
 
 void loop()
 {  
   int powerDetection = analogRead(POWER_DETECT_PIN);
   // Serial.println(powerDetection);
+  int potVal = analogRead(POT_PIN);
+
+  int delayVal;
+  if(potVal > 580)
+  {
+    digitalWrite(DIR_PIN, HIGH);
+    delayVal = 2000.0 - (1700.0/514.0)*float(potVal - 580);
+    // Serial.println("HIGH + " + String(delayVal));
+  }
+  else if(potVal < 450)
+  {
+    digitalWrite(DIR_PIN, LOW);
+    delayVal = (1700.0/514.0)*float(potVal) + 500;
+    // Serial.println("LOW + " + String(delayVal));
+  }
+  else
+  {
+    digitalWrite(STEP_PIN, LOW);
+    delayVal = 0;
+    // Serial.println("STOPPING MOTOR + " + String(delayVal));
+  }
   
-  if (powerDetection > 750)
+  if (powerDetection > 700 && delayVal > 0)
   {
     // Serial.println("POWER DETECTED, ENGAGING MOTOR DRIVER");
     digitalWrite(ENGAGE_A4988_PIN, LOW);
 
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(5000);
+    delayMicroseconds(500);
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(5000);
-    count++;
+    delayMicroseconds(500);
+    // count++;
     // Serial.println(count);
-    if (count > 200)
-    {
-      count = 0;
-    }
+    // if (count > 200)
+    // {
+    //   count = 0;
+    // }
   }
   else
   {
