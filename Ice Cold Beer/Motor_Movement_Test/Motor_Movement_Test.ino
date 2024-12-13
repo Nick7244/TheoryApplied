@@ -5,6 +5,14 @@
 #define POT_PIN A1
 
 int count = 0;
+unsigned long loopStartTime = micros();
+unsigned long oneSecondTimerStartTime;
+unsigned long quarterSecondTimerStartTime;
+unsigned long averageLoopTime;
+int averageLoopTimeCounter = 0;
+
+unsigned long sleepTime;
+unsigned long motorOnTime;
 
 void setup()
 {
@@ -23,12 +31,44 @@ void setup()
   digitalWrite(DIR_PIN, HIGH);
 
   pinMode(POT_PIN, INPUT);
+  oneSecondTimerStartTime = millis();
+  quarterSecondTimerStartTime = millis();
 }
 
 void loop()
 {  
+  unsigned long loopTime = micros() - loopStartTime;
+  loopStartTime = micros();
+
+  bool oneSecondTimerEnded = (millis() - oneSecondTimerStartTime) > 1000;
+  bool quarterSecondTimeEnded = (millis() - quarterSecondTimerStartTime) > 250;
+  
+  if(oneSecondTimerEnded)
+  {
+    oneSecondTimerStartTime = millis();
+  }
+  
+  if(quarterSecondTimeEnded)
+  {
+    quarterSecondTimerStartTime = millis();
+  }
+
+  averageLoopTime += loopTime;
+  averageLoopTimeCounter++;
+
+  if(oneSecondTimerEnded)
+  {
+    // Serial.println("Average loop tims (us): " +
+      // String((float)(averageLoopTime) / (float)(averageLoopTimeCounter)));
+    averageLoopTime = 0;
+    averageLoopTimeCounter = 0;
+  }
+  
   int powerDetection = analogRead(POWER_DETECT_PIN);
-  // Serial.println(powerDetection);
+  if(oneSecondTimerEnded)
+  {
+    // Serial.println(powerDetection);
+  }
   int potVal = analogRead(POT_PIN);
 
   int delayVal;
@@ -36,42 +76,72 @@ void loop()
   {
     digitalWrite(DIR_PIN, HIGH);
     delayVal = 2000.0 - (1700.0/514.0)*float(potVal - 580);
-    // Serial.println("HIGH + " + String(delayVal));
+    
+    if(quarterSecondTimeEnded)
+    {
+      // Serial.println("HIGH + " + String(delayVal));
+    }
   }
   else if(potVal < 450)
   {
     digitalWrite(DIR_PIN, LOW);
     delayVal = (1700.0/514.0)*float(potVal) + 500;
-    // Serial.println("LOW + " + String(delayVal));
+
+    if(quarterSecondTimeEnded)
+    {
+      // Serial.println("LOW + " + String(delayVal));
+    }
   }
   else
   {
     digitalWrite(STEP_PIN, LOW);
     delayVal = 0;
-    // Serial.println("STOPPING MOTOR + " + String(delayVal));
+    
+    if(quarterSecondTimeEnded)
+    {
+      // Serial.println("STOPPING MOTOR + " + String(delayVal));
+    }
   }
   
   if (powerDetection > 700 && delayVal > 0)
   {
-    // Serial.println("POWER DETECTED, ENGAGING MOTOR DRIVER");
+    if(oneSecondTimerEnded)
+    {
+      // Serial.println("POWER DETECTED, ENGAGING MOTOR DRIVER");
+    }
     digitalWrite(ENGAGE_A4988_PIN, LOW);
 
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(500);
+    delayMicroseconds(delayVal);
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(500);
-    // count++;
-    // Serial.println(count);
-    // if (count > 200)
-    // {
-    //   count = 0;
-    // }
+    
+    sleepTime = delayVal;
+    motorOnTime = delayVal;
   }
   else
   {
-    Serial.println("POWER NOT DETECTED, DISENGAGING MOTOR DRIVER");
-    digitalWrite(ENGAGE_A4988_PIN, HIGH);
+    if(oneSecondTimerEnded)
+    {
+      // Serial.println("POWER NOT DETECTED, DISENGAGING MOTOR DRIVER");
+    }
 
-    delay(100);
+    digitalWrite(ENGAGE_A4988_PIN, HIGH);
+    sleepTime = 1000;
+    motorOnTime = 0;
   }
+
+  if(oneSecondTimerEnded)
+  {
+    // Serial.println(" ");
+  }
+
+  unsigned long timeElapsed = micros() - loopStartTime;
+  unsigned long nonMotorOnCodeTime = timeElapsed - motorOnTime;
+  if(oneSecondTimerEnded)
+  {
+    // Serial.println(nonMotorOnCodeTime);
+    // Serial.println(sleepTime);
+    // Serial.println(sleepTime - nonMotorOnCodeTime - 25);
+  }
+  delayMicroseconds(sleepTime - nonMotorOnCodeTime - 25);
 }
