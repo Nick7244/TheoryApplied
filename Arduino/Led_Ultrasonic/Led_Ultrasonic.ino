@@ -64,7 +64,6 @@ void loop() {
     case DETECTED:
     {
       int pwm = 0;
-      int startTime = millis();
       
       // Parameters defining exponential growth of LED voltage
       // (leads to pseudo-linear brightness growth)
@@ -72,15 +71,25 @@ void loop() {
       double tf = 1000.0; // 1000 ms to completion
       auto r = log((5+p)/p) / tf;
 
+      int startTime = millis();
+
       // Turn on LED
       while (true)
       {
         int t = millis() - startTime;
-        auto desiredVoltage = p * exp(r * double(t));
+        auto desiredVoltage = p * exp(r * double(t)) - p;
         int pwm = round(desiredVoltage * (255.0/5.0));
 
         if (pwm > 255) { pwm = 255; }
-        Serial.println(pwm);
+        Serial.print(pwm);
+        Serial.print(", ");
+        Serial.print(p);
+        Serial.print(", ");
+        Serial.print(r * 1000.0);
+        Serial.print(", ");
+        Serial.print(t);
+        Serial.print(", ");
+        Serial.println(desiredVoltage);
 
         analogWrite(LED_Pin, pwm);
 
