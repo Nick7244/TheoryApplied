@@ -1,12 +1,13 @@
+#define Trig_Pin 10//blue
+#define Echo_Pin 12 //yellow
+#define Button_Pin 9 
 #define LED_Pin 3
-#define Trig_Pin 4
-#define Echo_Pin 5
-#define Button_Pin 7
 
 float cm_per_us = 0.01715;
-int fsm_state;
+int fsmState_;
+int stateCounter_;
 
-enum FSM_STATES {
+enum fsmStateS {
   UNDETECTED  = 0,
   DETECTED    = 1,
   LED_ON      = 2,
@@ -21,7 +22,8 @@ void setup() {
   pinMode(Button_Pin, INPUT);
 
   // Initialize FSM
-  fsm_state = UNDETECTED;
+  fsmState_ = UNDETECTED;
+  stateCounter_ = 0;
 }
 
 void loop() {
@@ -49,17 +51,43 @@ void loop() {
   float distance = cm_per_us * float(twoWayTimeOfFlight_us);
 
   Serial.print("FSM State: ");
-  Serial.println(fsm_state);
+  Serial.print(fsmState_);
+  Serial.print(", State counter = ");
+  Serial.print(stateCounter_);
+  Serial.print(", Distance (cm) = ");
+  Serial.println(distance);
   Serial.println();
 
-  switch (fsm_state)
+  updateFSMTime(&stateCounter_);
+
+  switch (fsmState_)
   {
-    case UNDETECTED:
-      if (distance <= 200.0)
+    case UNDETECTED: 
+    {
+      //Reset distance counter upon entry to state
+      static int distanceCounter = 0;
+      if(stateCounter_ == 1)
       {
-        fsm_state = DETECTED;
+        distanceCounter = 0;
+      }
+
+      //Update distance counter
+      if(distance <= 150.0)
+      {
+        distanceCounter++;
+      }
+      else
+      {
+        distanceCounter = 0;
+      }
+
+      //If we're certain there is someone there, turn the LED on
+      if(distanceCounter >= 10)
+      {
+        updateFSMState(&fsmState_, &stateCounter_, DETECTED);
       }
       break;
+    }
     
     case DETECTED:
     {
@@ -97,7 +125,7 @@ void loop() {
         delay(1);
       }
 
-      fsm_state = LED_ON;            
+      updateFSMState(&fsmState_, &stateCounter_, LED_ON);              
       break;
     }
 
@@ -106,17 +134,37 @@ void loop() {
       if (digitalRead(Button_Pin) == HIGH)
       {
         analogWrite(LED_Pin, 0);
-        fsm_state = LED_OFF;        
+        updateFSMState(&fsmState_, &stateCounter_, LED_OFF);    
       }
       break;
 
     case LED_OFF:
+    {
+      //Reset distance counter upon entry to state
+      static int distanceCounter = 0;
+      if(stateCounter_ == 1)
+      {
+        distanceCounter = 0;
+      }
+
       // Wait until obstacle is gone to reset FSM
       if (distance > 200.0)
       {
-        fsm_state = UNDETECTED;
+        distanceCounter++;
       }
+      else
+      {
+        distanceCounter = 0;
+      }
+
+      //If we're certain the person is gone, 
+      if(distanceCounter >= 10 && stateCounter_ >= 50)
+      {
+        updateFSMState(&fsmState_, &stateCounter_, UNDETECTED);
+      }
+      
       break;
+    }
 
     default:
       // do nothing
@@ -124,4 +172,16 @@ void loop() {
   };
 
   delay(100);
+}
+
+
+void updateFSMState(int * fsmState, int * stateCounter, int newState)
+{
+  *fsmState = newState;
+  *stateCounter = 0;
+}
+
+void updateFSMTime(int * stateCounter)
+{
+  *stateCounter += 1;
 }
